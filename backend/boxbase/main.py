@@ -38,4 +38,11 @@ async def health() -> HealthResponse:
         HealthResponse: 包含 status="ok"、当前版本号和服务标识的固定响应。
     """
     # 直接返回固定响应，version 从 __version__ 读取保证与包元信息一致
-    return HealthResponse(status="ok", version=__version__, service="boxbase")
+    return HealthResponse(status="broken", version=__version__, service="boxbase")
+
+
+# ---- 以下为故意引入的错误，用于测试 CI 防线 ----
+
+unused_var = 42  # 触发 ruff F841: unused variable
+
+x: int = "string"  # 触发 mypy: Incompatible types in assignment
