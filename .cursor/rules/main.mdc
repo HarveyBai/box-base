@@ -1,0 +1,6 @@
+---
+description: BoxBase project rules - delegated to AGENTS.md
+alwaysApply: true
+---
+
+See @AGENTS.md for the canonical project rules. All AI agents working on this project must follow AGENTS.md.
