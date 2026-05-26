@@ -155,7 +155,6 @@ ENV/
 env/
 
 # uv
-uv.lock
 
 # Type checking
 .mypy_cache/
