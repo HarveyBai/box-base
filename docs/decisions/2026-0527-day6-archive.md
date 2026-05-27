@@ -88,7 +88,7 @@
 | pre-commit run --all-files | 全栈验证 | Day 6：5/5 hooks 全绿 |
 | uv run pytest | 后端测试 | 4/4 passed（/health + OpenAPI ×3），1.59s |
 | GitHub Actions | 云端 CI | Run #1-#5 全绿，#6 pending |
-| Web Fetch (GitHub) | actions 版本核实 | checkout@v6 / setup-node@v6 / setup-uv@v8 / pnpm/action-setup@v6 |
+| Web Fetch (GitHub) | actions 版本核实 | checkout@v6 / setup-node@v6 / setup-uv@v7 / pnpm/action-setup@v6 |
 
 ## 5. 决策与结论（含历史累积）
 
@@ -110,7 +110,7 @@
 1. **GitHub Actions actions 主版本统一升级到最新稳定**（修 Node 20 deprecation）
    - actions/checkout: v4 → v6
    - actions/setup-node: v4 → v6
-   - astral-sh/setup-uv: v5 → v8
+   - astral-sh/setup-uv: v5 → v7
    - pnpm/action-setup: v4 → v6
    - 根治策略：升级 action 本身使其 native 支持 Node 24，不用 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 临时 opt-in
 
@@ -154,11 +154,12 @@
 | Day 4：SSH Agent 双客户端冲突 | push 报 passphrase | git config --global core.sshCommand 永久固化 |
 | Day 5：归档文件名日期错误（0528 vs 0527） | 用户验收时手动改正 | 约定以 current-time 为准 |
 | Day 5：派工提示词拆成多段 | 反馈 | 单代码块整段输出 |
-| Day 6 无新增错误 |
+| AI 工具核对 GitHub Actions 版本时把 setup-uv 误判为 v8（实际最新 v7），导致 CI Run #6 lint-and-test job 因 "unable to find version 'v8'" 3 秒失败 | CI Run #6 截图反馈 | 联网二次访问 https://api.github.com/repos/astral-sh/setup-uv/git/ref/tags 确认 v8 浮动标签不存在（v8.0.0/v8.1.0 为 immutable release 不再提供 mutable major tag），回退到 @v7；后续约定：所有 GitHub Actions、npm/pnpm 包、Python 包的版本号写入 yaml/lock 前必须看到具体 Release 页面的版本号字符串，禁止跨主版本号"猜测式跳跃"（v5→v8 这种跨越必须页面双重确认） |
+| LoginPage.tsx 提交逻辑用 console.log 触发 ESLint annotation warning（job 未红但 eslint.config.js 明确禁用 console.log，仅允许 warn/error） | CI Run #6 annotations | 改为 console.warn；后续约定：写前端调试日志前先核对 frontend/eslint.config.js 的 no-console 配置，复用现有 allow 列表里的方法 |
 
 ## 7. 讨论演变
 
-Day 1 工程骨架 → Day 2-3 pre-commit + CI + 攻防演练 → Day 4 前端骨架 + 工程化 + Git → Day 5 路由化 + CI 合并 + pre-commit 前端 hook + README → Day 6 开门用户发完整 spec → 任务 0 补 Day 5 归档 section 6（日期错误 + 提示词拆分两笔）→ 联网查 actions 最新版本（checkout@v6 / setup-node@v6 / setup-uv@v8 / pnpm/action-setup@v6）→ ci.yml 升级全部 actions + 新增 secret-scan job（TruffleHog）→ 前端 LoginPage + DashboardPage 新页面 + 路由、HomePage 导航同步 → 后端 FastAPI OpenAPI 元数据补全 + test_openapi.py 新增 3 个测试 → pytest 4/4 全绿 → tsc/eslint 零错 / prettier 新文件基线格式化 → docs/retrospectives/2026-W1-retrospective.md 完整复盘文档落地 → Day 5 归档 section 8 commit hash/CI 状态占位符补全 → docs/decisions/2026-0527-day6-archive.md 归档 → pre-commit 5/5 全绿 → commit + push + CI 验证 pending
+Day 1 工程骨架 → Day 2-3 pre-commit + CI + 攻防演练 → Day 4 前端骨架 + 工程化 + Git → Day 5 路由化 + CI 合并 + pre-commit 前端 hook + README → Day 6 开门用户发完整 spec → 任务 0 补 Day 5 归档 section 6（日期错误 + 提示词拆分两笔）→ 联网查 actions 最新版本（checkout@v6 / setup-node@v6 / setup-uv@v7 / pnpm/action-setup@v6）→ ci.yml 升级全部 actions + 新增 secret-scan job（TruffleHog）→ 前端 LoginPage + DashboardPage 新页面 + 路由、HomePage 导航同步 → 后端 FastAPI OpenAPI 元数据补全 + test_openapi.py 新增 3 个测试 → pytest 4/4 全绿 → tsc/eslint 零错 / prettier 新文件基线格式化 → docs/retrospectives/2026-W1-retrospective.md 完整复盘文档落地 → Day 5 归档 section 8 commit hash/CI 状态占位符补全 → docs/decisions/2026-0527-day6-archive.md 归档 → pre-commit 5/5 全绿 → commit + push + CI 验证 pending
 
 ## 8. 当前状态与后续步骤
 
@@ -207,7 +208,7 @@ Run #6 pending（push 后查询，预期 3 job 并行 + 0 warnings）
 ### 技术栈备忘（最新，Week 1 结束）
 - 后端：Python 3.12 + FastAPI + SQLAlchemy 2.0 + Pydantic v2 + uv
 - 前端：React 19.2 + Vite 8 + TypeScript 6 + Ant Design 6.4.3 + react-router-dom 7.15.1
-- CI actions：checkout@v6 / setup-node@v6 / setup-uv@v8 / pnpm/action-setup@v6 / trufflehog@main
+- CI actions：checkout@v6 / setup-node@v6 / setup-uv@v7 / pnpm/action-setup@v6 / trufflehog@main
 - 数据库：SQLite（dev）/ PostgreSQL 13+（prod）
 - 工具链：ruff + mypy + pytest + ESLint 10 + Prettier 3.8 + pre-commit（5 hooks）+ GitHub Actions（3 jobs）
 - 包管理：uv（Python）/ pnpm 10.33+（Node）

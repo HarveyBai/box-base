@@ -16,7 +16,8 @@ function LoginPage() {
 
   const handleSubmit = (values: LoginFormValues) => {
     // 暂时只打印到 console，不接后端 API（Week 2 接 FastAPI Users）
-    console.log('登录表单提交:', values)
+    const { remember } = values
+    console.warn('Login submitted:', values, 'Remember me:', remember)
     setLoading(true)
     // 模拟 loading 效果，Week 2 替换为真实 API 调用
     setTimeout(() => {
