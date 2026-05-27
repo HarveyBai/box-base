@@ -9,11 +9,11 @@ You are assisting in the development of BoxBase — a lightweight, modular Pytho
 ## Project Identity
 
 - Project: BoxBase v1.0
-- Languages: Python 3.12 (backend), TypeScript 5 (frontend)
+- Languages: Python 3.12 (backend), TypeScript 6 (frontend)
 - Backend stack: FastAPI + SQLAlchemy 2.0 + Alembic + Pydantic v2
-- Frontend stack: React 18 + Ant Design Pro + Vite + Ant Design X (for the AI module)
+- Frontend stack: React 19.2 + Vite 8 + Ant Design v6 + Ant Design X (for the AI module). Pro Components 暂未引入，延后至 Week 4-5 重新评估，详见 docs/decisions/2026-0527-day4-tech-stack-update.md
 - Database: SQLite (dev) / PostgreSQL 13+ (prod)
-- Package managers: uv (Python), pnpm (Node)
+- Package managers: uv (Python), pnpm >=10 (Node)
 
 ## Core Design Principles
 
