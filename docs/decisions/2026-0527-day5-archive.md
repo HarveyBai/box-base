@@ -73,16 +73,16 @@
 
 | 工具 | 用途 | 关键结果 |
 |---|---|---|
-| git | 版本控制 | Day 1-5 commit 链：167ff19 → 0a1af7a → ed8cec8 → 3f32cd5 → 6f4a3fb → 38cc2ec → **xxxxxxx**（Day 5） |
+| git | 版本控制 | Day 1-5 commit 链：167ff19 → 0a1af7a → ed8cec8 → 3f32cd5 → 6f4a3fb → 38cc2ec → **32895c8**（Day 5） |
 | uv add --dev pre-commit | 后端 pre-commit | 4.6.0 + 9 依赖 |
 | pre-commit run --all-files | 全栈验证 | Day 5：5/5 hooks 全绿（新增 frontend-eslint + frontend-prettier） |
-| GitHub Actions | 云端 CI | Run #1 全绿 / #2 失败（破坏性测试）/ #3 全绿 / #4 success（Day 4）/ **#5 pending** |
+| GitHub Actions | 云端 CI | Run #1 全绿 / #2 失败（破坏性测试）/ #3 全绿 / #4 success（Day 4）/ **#5 success（Day 5，25 秒，2 deprecation warnings）** |
 | pnpm create vite | 前端脚手架 | 初始化 react-ts 模板，React 19.2 + Vite 8 + TS 6 + ESLint 10 |
 | pnpm add（带单引号） | 装包 | 'react-router-dom@^7' 成功，7.15.1 |
 | pnpm exec tsc --noEmit | 类型检查 | exitCode 0，零错误 |
 | pnpm exec eslint . | Lint 检查 | exitCode 0，零错误 |
 | pnpm exec prettier --check / --write | 格式检查/修复 | Day 5 新增 3 文件基线格式化，最终 All matched files |
-| GitHub API（curl） | CI 状态查询 | Run #5 待 push 后查询 |
+| GitHub API（curl） | CI 状态查询 | Run #5 / success / 25 秒 / 2 job 并行 |
 
 ## 5. 决策与结论（含历史累积）
 
@@ -137,7 +137,8 @@
 | Day 4：node_modules native 模块文件锁定无法删除 | rm -rf 失败 | dev server 残留进程未退；用户手动 Stop-Process 清理 |
 | Day 4：5173 端口被僵尸进程占用，Vite 漂移到 5174/5175 | 浏览器地址栏 5175 | 用户手动杀进程清理 |
 | Day 4：ssh-add -l 可见但 git push 仍要 passphrase | push 时 read_passphrase 错误 | 根因是 Windows 双 SSH 客户端不共享 Agent；修复：git config --global core.sshCommand；已永久固化 |
-| Day 5 无新增错误 |
+| Day 5：AI 助手凭"Day 顺延一天"直觉将归档文件起名为 2026-0528-day5-archive.md，未核对当天实际日期 | 用户验收时手动改正 | 约定后续所有带日期的文件名（归档、决策、备忘）必须先核对 <current-time> 或用户明示日期，禁止用"上一个 Day 的日期 +1"凑数 |
+| Day 5：AI 助手多次将可复制的整块派工提示词拆成多个代码段，影响用户复制效率 | Day 5 派工提示词反馈 | 约定后续所有派工提示词、长脚本必须用单个代码块整段输出，外层用四反引号包裹避免内部三反引号冲突 |
 
 ## 7. 讨论演变
 
@@ -156,7 +157,7 @@ Day 1（前期）完成工程骨架 + /health TDD + AGENTS.md → Day 2 修 .git
 ## 8. 当前状态与后续步骤
 
 ### Git 历史（最新 chronologically 排序）
-- **xxxxxxx feat(frontend): add routing, README, and frontend CI/pre-commit integration**（Day 5 主 commit，pending）
+- **32895c8 feat(frontend): add routing, README, and frontend CI/pre-commit integration**（Day 5 主 commit）
 - 38cc2ec feat(frontend): scaffold Vite 8 + React 19.2 + AntD 6 frontend skeleton（Day 4）
 - 6f4a3fb fix: resolve intentional errors and restore CI to green（Day 3）
 - 3f32cd5 test: intentional error to test CI（Day 3）
@@ -165,10 +166,10 @@ Day 1（前期）完成工程骨架 + /health TDD + AGENTS.md → Day 2 修 .git
 - 167ff19 fix: track uv.lock in version control and add day1 archive（Day 1）
 
 ### 远端仓库
-git@github.com:HarveyBai/box-base.git（Day 4 已同步到 38cc2ec，Day 5 pending push）
+git@github.com:HarveyBai/box-base.git（已同步到 32895c8）
 
 ### CI 状态
-Run #5 pending（push 后查询）
+Run #5 / success / 25 秒 / 2 job 并行 / 2 deprecation warnings（Day 6 修）
 
 ### Completed
 - Day 1：工程骨架 + /health 端点 + TDD + AGENTS.md + CONTRIBUTING.md

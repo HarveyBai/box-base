@@ -22,6 +22,14 @@ function HomePage() {
       <Paragraph style={{ marginTop: 16 }}>
         <Link to="/non-existent">测试 404 路径</Link>
       </Paragraph>
+      <Space style={{ marginTop: 16 }}>
+        <Link to="/login">
+          <Button>登录页</Button>
+        </Link>
+        <Link to="/dashboard">
+          <Button>Dashboard</Button>
+        </Link>
+      </Space>
     </>
   )
 }

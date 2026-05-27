@@ -27,7 +27,11 @@ class HealthResponse(BaseModel):
 
 
 # 创建 FastAPI 应用实例，版本号从包元信息读取
-app = FastAPI(title="BoxBase", version=__version__)
+app = FastAPI(
+    title="BoxBase API",
+    description="轻量级模块化 Python 多租户 SaaS 框架",
+    version=__version__,
+)
 
 
 @app.get("/health", response_model=HealthResponse)
