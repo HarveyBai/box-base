@@ -16,3 +16,15 @@ repos:
         entry: uv run --directory backend mypy boxbase/
         language: system
         pass_filenames: false
+      - id: frontend-eslint
+        name: frontend eslint
+        entry: pnpm --dir frontend exec eslint .
+        language: system
+        pass_filenames: false
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+      - id: frontend-prettier
+        name: frontend prettier check
+        entry: pnpm --dir frontend exec prettier --check .
+        language: system
+        pass_filenames: false
+        files: ^frontend/.*\.(ts|tsx|js|jsx|json|css|md)$
