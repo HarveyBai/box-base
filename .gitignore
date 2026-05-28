@@ -182,3 +182,6 @@ coverage.xml
 # OS
 .DS_Store
 Thumbs.db
+
+# Project secrets (never commit)
+ops/SECRETS.md

@@ -14,10 +14,20 @@ You are assisting in the development of BoxBase — a lightweight, modular Pytho
 - Frontend stack: React 19.2 + Vite 8 + Ant Design v6 + react-router-dom v7 + Ant Design X (for the AI module). Pro Components 暂未引入，延后至 Week 4-5 重新评估，详见 docs/decisions/2026-0527-day4-tech-stack-update.md
 - Database: SQLite (dev) / PostgreSQL 13+ (prod)
 - Package managers: uv (Python), pnpm >=10 (Node)
+- Node.js runtime managed by: mise (scoop install, replaced fnm on 2026-05-28)
 - CI toolchain: actions/checkout@v6 / actions/setup-node@v6 / pnpm/action-setup@v4 / astral-sh/setup-uv@v7 / trufflesecurity/trufflehog@main
 - CI: GitHub Actions, 3 job 并行（lint-and-test / frontend-quality / secret-scan）；详见 .github/workflows/ci.yml
 - Known accepted warning: Node 20 deprecation（accepted until 2026-09-16 deadline；see docs/decisions/2026-0527-day6-archive.md section 5 for upgrade principle）
 - Dependency upgrade principle: CI toolchain upgrades require explicit triggers (deprecation < 30d, security vulnerability, required new feature). Do NOT upgrade just for "zero warning" or "latest version". See docs/decisions/2026-0527-day6-archive.md section 5 for details.
+
+## Shell Environment (mise migration, 2026-05-28)
+
+- Node.js runtime is managed by **mise** (installed via scoop, replaced fnm)
+- mise uses shims to make `node`/`npm`/`pnpm` available in **PowerShell**, **cmd**, and **bash**
+- Migration reason: fnm only supports PowerShell; its CLIXML output caused frequent AI tool parse timeouts. mise shims eliminate this issue entirely.
+- AI tools can freely use `node` and `pnpm` in PowerShell or cmd — no special workarounds needed.
+- mise shims PATH: `%USERPROFILE%\AppData\Local\mise\shims` (persisted in User PATH)
+- `ops/SECRETS.md` is permanently excluded via `.gitignore` — tool-enforced, no manual discipline required.
 
 ## Core Design Principles
 
