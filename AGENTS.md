@@ -14,6 +14,10 @@ You are assisting in the development of BoxBase — a lightweight, modular Pytho
 - Frontend stack: React 19.2 + Vite 8 + Ant Design v6 + react-router-dom v7 + Ant Design X (for the AI module). Pro Components 暂未引入，延后至 Week 4-5 重新评估，详见 docs/decisions/2026-0527-day4-tech-stack-update.md
 - Database: SQLite (dev) / PostgreSQL 13+ (prod)
 - Package managers: uv (Python), pnpm >=10 (Node)
+- CI toolchain: actions/checkout@v6 / actions/setup-node@v6 / pnpm/action-setup@v4 / astral-sh/setup-uv@v7 / trufflesecurity/trufflehog@main
+- CI: GitHub Actions, 3 job 并行（lint-and-test / frontend-quality / secret-scan）；详见 .github/workflows/ci.yml
+- Known accepted warning: Node 20 deprecation（accepted until 2026-09-16 deadline；see docs/decisions/2026-0527-day6-archive.md section 5 for upgrade principle）
+- Dependency upgrade principle: CI toolchain upgrades require explicit triggers (deprecation < 30d, security vulnerability, required new feature). Do NOT upgrade just for "zero warning" or "latest version". See docs/decisions/2026-0527-day6-archive.md section 5 for details.
 
 ## Core Design Principles
 
@@ -143,15 +147,16 @@ When chatting with me in Chinese:
 
 ## Current Phase
 
-We are in **Week 1: Engineering Foundation**. Focus only on:
-- Project skeleton (`pyproject.toml`, `package.json`)
-- Linting, formatting, type checking (ruff, mypy, prettier, eslint)
-- CI/CD pipelines (GitHub Actions)
-- Test framework setup (pytest, Playwright)
-- Pre-commit hooks
-- One Hello World endpoint and one Hello World test
+**Week 1: Engineering Foundation is COMPLETE** (tag: week1-complete @ 07ee750). CI Run #9 全绿（25s，3 job 并行，1 条 Node 20 deprecation warning 已接受）。
 
-**Do NOT start implementing business features (auth, tenant, RBAC, modules, audit) until I explicitly say "begin Week 2".​**
+We are preparing for **Week 2: Authentication & Multi-tenancy**. Focus on:
+- FastAPI Users integration (auth system)
+- Multi-tenant data model (org_id + SQLAlchemy event listeners)
+- RBAC implementation (PermissionChecker interface + Casbin)
+- Frontend LoginPage connect to real API
+
+**Week 2 Day 1 discipline: Architecture review FIRST, no code until approved.**
+See docs/retrospectives/2026-W1-retrospective.md and docs/decisions/2026-0527-day6-archive.md for full context.
 
 ## When in Doubt
 

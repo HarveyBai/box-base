@@ -41,7 +41,8 @@
 9. **前端 CI 合并到 ci.yml 不独立 workflow**（Day 5）—— frontend-quality job 与 backend 并行
 10. **pre-commit 前端 hook 不跑 tsc**（Day 5）—— tsc 全量太慢，留到 CI job
 11. **TruffleHog 接入**（Day 6）—— 独立 secret-scan job 并行，--only-verified
-12. **GitHub Actions actions 主版本统一升级**（Day 6）—— checkout@v6 / setup-node@v6 / setup-uv@v8 / pnpm/action-setup@v6，根治 Node 20 deprecation
+12. **GitHub Actions actions 主版本统一升级**（Day 6）—— 原计划 checkout@v6 / setup-node@v6 / setup-uv@v8 / pnpm/action-setup@v6，后经 4 次 hotfix 修正为 checkout@v6 / setup-node@v6 / setup-uv@v7 / pnpm/action-setup@v4（最终态）
+13. **回退 pnpm/action-setup 到 v4 + 接受 Node 20 deprecation**（Day 6 Hotfix #3）—— v6 与 cache: pnpm 形成循环依赖无法解耦；回退到 Day 4-5 已验证稳定状态；接受 Node 20 deprecation warning（deadline 2026-09-16，3+ 月后处理）；核心原则：CI 必须绿 > 零 warning
 
 ## 踩过的坑（按类别归并）
 
@@ -57,7 +58,7 @@
 
 - **AI 误判 React 19 / Vite 8 / TS 6 / ESLint 10 是幻觉**：联网核实全部真实存在，知识滞后。此后所有版本判断必须先联网
 - **Pro Components v3 仅 beta 与 antd 6 不兼容**：ERR_PNPM_NO_MATCHING_VERSION，v2 锁死 antd 5。决策 Day 4 不引入
-- **GitHub Actions Node 20 deprecation warning**：2026-06-02 强制切 Node 24。升级所有 actions 主版本根治
+- **GitHub Actions Node 20 deprecation warning**：2026-06-02 强制切 Node 24。原计划升级所有 actions 主版本根治，后在 Hotfix #3 回退 pnpm/action-setup 到 v4，改为接受 warning（deadline 2026-09-16，3+ 月后处理）。核心教训：未来依赖升级前评估循环依赖风险
 
 ### 类别 3：流程纪律
 
@@ -69,6 +70,9 @@
 
 - **故意引入错误验证 pre-commit 拦截**：3 类错误（print / type ignore / bare except），pre-commit 全拦截
 - **--no-verify 绕过 + GitHub Actions 20 秒熔断验证**：CI 在云端独立运行，不受本地 --no-verify 影响，双重防线有效
+- **Day 6 Hotfix #1（Run #6）**：setup-uv@v8 浮动标签不存在（v8.0.0 是 immutable release），教训：actions 版本写 yaml 前必须联网确认浮动主版本标签 HTTP 200
+- **Day 6 Hotfix #2（Run #7）**：pnpm/action-setup@v6 self-installer 因步骤顺序违反 README 报错，教训：编排顺序以官方 README 示例为准
+- **Day 6 Hotfix #3（Run #8）**：Hotfix #2 的步骤调换暴露了 cache: pnpm 与 v6 self-installer 的循环依赖——setup-node cache 需要 pnpm 就绪，v6 装 pnpm 又需要 Node 就绪，二者死锁。教训：(1) 升级前评估循环依赖风险；(2) 稳定状态 > 零 warning；(3) 非紧急 deprecation 不优先于 CI 绿
 
 ## 工程纪律沉淀（给 Week 2 接班的自己）
 
@@ -82,6 +86,10 @@
 8. **验收三连**：tsc / eslint / prettier --check + pytest + pre-commit --all-files（各 Day 积累）
 9. **AI 工具自由发挥要按住**—— 不在 spec 范围内的动作先问（Day 4 教训）
 10. **commit message 用 Conventional Commits 英文**—— 自动化 changelog 兼容（AGENTS.md 要求）
+11. **GitHub Actions 版本号入 yaml 前联网核实浮动标签**—— 访问 `api.github.com/repos/<owner>/<repo>/git/ref/tags/v<N>` 确认 HTTP 200 + SHA（Day 6 Hotfix #1 教训）
+12. **GitHub Actions 步骤顺序以官方 README 为准**—— 不凭直觉编排（Day 6 Hotfix #2 教训）
+13. **依赖升级前评估循环依赖**—— 特别是 cache 参数与包管理器 action 的双向耦合（Day 6 Hotfix #3 教训）
+14. **依赖升级原则**—— 非紧急不升级；deadline > 30 天的 deprecation 留在下次维护窗口；CI 绿 > 零 warning（Day 6 全局教训）
 
 ## CI 数据
 
@@ -92,7 +100,12 @@
 | #3 | Day 3 | ~30s | ✅ | 修复后恢复全绿 |
 | #4 | Day 4 | 21s | ✅ | 前端骨架接入，9 步全绿 |
 | #5 | Day 5 | 25s | ✅ | 前端 CI job 并行，2 deprecation warnings |
-| #6 | Day 6 | pending | ⏳ | 3 job 并行 + Node 24 native |
+| #6 | Day 6 Hotfix #1 | 3s | ❌ | setup-uv@v8 无法解析（v8 浮动标签不存在） |
+| #7 | Day 6 Hotfix #2 | 4s | ❌ | pnpm self-installer exit 1（步骤顺序违反 README） |
+| #8 | Day 6 Hotfix #3 | 3s | ❌ | pnpm not found（cache 参数与 v6 循环依赖） |
+| **#9** | **Day 6 最终** | **25s** | **✅** | **3 job 全绿，1 warning（Node 20 deprecation，已接受）** |
+| **成功平均耗时** | **25s** | | | |
+| **成功/失败比** | **6:3** | | | 含 1 次预期破坏性测试 + 3 次 hotfix 失败 |
 
 ## Week 1 时间统计
 
@@ -108,6 +121,8 @@
 原计划 Week 1 40 小时，实际 ~36.5 小时，节省 8.75%。
 
 ## Week 2 开门待办
+
+**⚠️ Week 2 Day 1 纪律：先做架构评审（认证方案 / 多租户模型 / RBAC 设计），不写代码。** 4 次 hotfix 的教训——盲目追求"零 warning"导致 CI 连续失败 3 次，Week 2 首日必须先对齐整体设计再动工。
 
 1. **FastAPI Users 接入**（认证体系）—— 注册 / 登录 / Token 刷新 / 密码重置
 2. **多租户数据模型设计**—— org_id + SQLAlchemy 事件监听器自动注入 WHERE org_id
