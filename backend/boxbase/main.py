@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel, ConfigDict
 
 from boxbase import __version__
+
+# 创建带 /api 前缀的路由器，所有业务路由统一挂载
+api_router = APIRouter(prefix="/api")
 
 
 class HealthResponse(BaseModel):
@@ -27,14 +30,18 @@ class HealthResponse(BaseModel):
 
 
 # 创建 FastAPI 应用实例，版本号从包元信息读取
+# OpenAPI 文档路径也统一挂载在 /api 前缀下
 app = FastAPI(
     title="BoxBase API",
     description="轻量级模块化 Python 多租户 SaaS 框架",
     version=__version__,
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
 )
 
 
-@app.get("/health", response_model=HealthResponse)
+@api_router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """健康检查端点，返回服务元信息。
 
@@ -43,3 +50,6 @@ async def health() -> HealthResponse:
     """
     # 直接返回固定响应，version 从 __version__ 读取保证与包元信息一致
     return HealthResponse(status="ok", version=__version__, service="boxbase")
+
+
+app.include_router(api_router)

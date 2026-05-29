@@ -85,6 +85,20 @@ For any feature implementation:
 - `docs/` — Sphinx documentation source (in Chinese)
 - `scripts/` — Cross-platform project scripts (written in Python to avoid bash/PowerShell drift)
 
+### API Routing Convention
+
+All backend HTTP-accessible paths — both business APIs and OpenAPI documentation
+(`/openapi.json`, `/docs`, `/redoc`) — are mounted under the `/api` prefix.
+
+Implementation:
+- Business routes use `APIRouter(prefix="/api")` and are included via `app.include_router()`.
+- OpenAPI documentation paths are explicitly configured: `openapi_url="/api/openapi.json"`,
+  `docs_url="/api/docs"`, `redoc_url="/api/redoc"`.
+
+Rationale: Future reverse proxy / ingress only needs to expose a single rule (`/api/*`),
+no per-endpoint allowlist. Dev (Vite proxy) and prod path layout are identical, so no
+rewrite logic anywhere in the stack.
+
 ## Command Conventions (avoid command drift)
 
 - Install Python deps: **​`uv add <pkg>` only**; never `pip install`.

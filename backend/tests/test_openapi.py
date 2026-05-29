@@ -1,6 +1,6 @@
 """OpenAPI 文档端点的测试套件。
 
-验证 /openapi.json、/docs、/redoc 三个端点均可正常访问。
+验证 /api/openapi.json、/api/docs、/api/redoc 三个端点均可正常访问。
 """
 
 from __future__ import annotations
@@ -25,12 +25,12 @@ async def client() -> AsyncClient:
 
 @pytest.mark.asyncio
 async def test_openapi_json_returns_200(client: AsyncClient) -> None:
-    """验证 GET /openapi.json 返回 200 且响应体为合法的 OpenAPI JSON。
+    """验证 GET /api/openapi.json 返回 200 且响应体为合法的 OpenAPI JSON。
 
     参数：
         client: 异步 HTTP 测试客户端 fixture。
     """
-    response = await client.get("/openapi.json")
+    response = await client.get("/api/openapi.json")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
     body = response.json()
@@ -41,21 +41,21 @@ async def test_openapi_json_returns_200(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_docs_swagger_ui_returns_200(client: AsyncClient) -> None:
-    """验证 GET /docs（Swagger UI）返回 200。
+    """验证 GET /api/docs（Swagger UI）返回 200。
 
     参数：
         client: 异步 HTTP 测试客户端 fixture。
     """
-    response = await client.get("/docs")
+    response = await client.get("/api/docs")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
 
 @pytest.mark.asyncio
 async def test_redoc_returns_200(client: AsyncClient) -> None:
-    """验证 GET /redoc（ReDoc）返回 200。
+    """验证 GET /api/redoc（ReDoc）返回 200。
 
     参数：
         client: 异步 HTTP 测试客户端 fixture。
     """
-    response = await client.get("/redoc")
+    response = await client.get("/api/redoc")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"

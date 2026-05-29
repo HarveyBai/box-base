@@ -1,34 +1,71 @@
-import { Button, Space, Typography } from 'antd'
-import { SmileOutlined, RocketOutlined } from '@ant-design/icons'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Alert, Button, Card, Descriptions, Space, Spin, Tag, Typography } from 'antd'
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined } from '@ant-design/icons'
+import { Link, useNavigate } from 'react-router-dom'
+import { fetchHealth, type HealthResponse } from '@/api/health'
 
 const { Title, Paragraph } = Typography
 
 function HomePage() {
+  const navigate = useNavigate()
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [data, setData] = useState<HealthResponse | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string>('')
+
+  useEffect(() => {
+    async function check() {
+      try {
+        const result = await fetchHealth()
+        setData(result)
+        setStatus('ok')
+      } catch (err: unknown) {
+        setErrorMsg(err instanceof Error ? err.message : String(err))
+        setStatus('error')
+      }
+    }
+    void check()
+  }, [])
+
   return (
     <>
-      <Title>BoxBase Frontend Boot Check</Title>
-      <Paragraph>
-        如果你能看到这段文字、下面两个按钮和图标，说明 React 19.2 + Vite 8 + AntD 6 + Icons 6
-        的渲染链路全部通畅。
-      </Paragraph>
-      <Paragraph>路由系统已就位（react-router-dom v7）</Paragraph>
-      <Space>
-        <Button type="primary" icon={<SmileOutlined />}>
-          Primary Button
-        </Button>
-        <Button icon={<RocketOutlined />}>Default Button</Button>
-      </Space>
+      <Title>Hello, BoxBase</Title>
+      <Paragraph>Welcome to BoxBase v1.0 — Lightweight multi-tenant SaaS framework.</Paragraph>
+
+      <Card title="Backend Health Check" style={{ maxWidth: 500, marginTop: 16 }}>
+        {status === 'loading' && (
+          <Spin indicator={<LoadingOutlined spin />} description="Checking backend...">
+            {/* Spin 需要子元素才能正确渲染 description */}
+            <div style={{ padding: 40 }} />
+          </Spin>
+        )}
+        {status === 'ok' && data && (
+          <>
+            <Tag icon={<CheckCircleOutlined />} color="success">
+              Healthy
+            </Tag>
+            <Descriptions column={1} style={{ marginTop: 16 }}>
+              <Descriptions.Item label="Status">{data.status}</Descriptions.Item>
+              <Descriptions.Item label="Service">{data.service}</Descriptions.Item>
+              <Descriptions.Item label="Version">{data.version}</Descriptions.Item>
+            </Descriptions>
+          </>
+        )}
+        {status === 'error' && (
+          <Alert
+            type="error"
+            icon={<CloseCircleOutlined />}
+            title="Backend unreachable"
+            description={errorMsg}
+          />
+        )}
+      </Card>
+
       <Paragraph style={{ marginTop: 16 }}>
-        <Link to="/non-existent">测试 404 路径</Link>
+        <Link to="/no-such-page">Test 404</Link>
       </Paragraph>
       <Space style={{ marginTop: 16 }}>
-        <Link to="/login">
-          <Button>登录页</Button>
-        </Link>
-        <Link to="/dashboard">
-          <Button>Dashboard</Button>
-        </Link>
+        <Button onClick={() => navigate('/login')}>Go Login</Button>
+        <Button onClick={() => navigate('/dashboard')}>Go Dashboard</Button>
       </Space>
     </>
   )

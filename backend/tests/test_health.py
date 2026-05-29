@@ -1,4 +1,4 @@
-"""/health 端点的测试套件。
+"""/api/health 端点的测试套件。
 
 AC ID: AC0.1-health-endpoint
 """
@@ -25,7 +25,7 @@ async def client() -> AsyncClient:
 
 @pytest.mark.asyncio
 async def test_health_returns_expected_response(client: AsyncClient) -> None:
-    """验证 GET /health 返回正确的 status、version 和 service 字段。
+    """验证 GET /api/health 返回正确的 status、version 和 service 字段。
 
     参数：
         client: 异步 HTTP 测试客户端 fixture。
@@ -33,7 +33,7 @@ async def test_health_returns_expected_response(client: AsyncClient) -> None:
     异常：
         AssertionError: 当状态码、响应体或任意字段不符合预期契约时抛出。
     """
-    response = await client.get("/health")
+    response = await client.get("/api/health")
 
     # 断言 HTTP 状态码为 200
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
