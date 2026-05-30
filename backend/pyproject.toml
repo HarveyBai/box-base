@@ -5,7 +5,11 @@ description = "BoxBase — A lightweight, modular Python framework for multi-ten
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
     "fastapi>=0.136.3",
+    "pydantic-settings>=2.14.1",
     "uvicorn[standard]>=0.48.0",
 ]
 

@@ -185,3 +185,8 @@ Thumbs.db
 
 # Project secrets (never commit)
 ops/SECRETS.md
+
+# SQLite runtime files
+*.db
+*.db-shm
+*.db-wal
