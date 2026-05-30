@@ -36,8 +36,11 @@ jobs:
       - name: Type check - mypy
         run: uv run mypy boxbase/
 
-      - name: Test - pytest
-        run: uv run pytest -v --tb=short
+      - name: Run tests with coverage (global >= 80%)
+        run: uv run pytest -v --tb=short --cov=boxbase --cov-report=term-missing --cov-fail-under=80
+
+      - name: Security module coverage gate (>= 95%)
+        run: uv run pytest -v --cov=boxbase.security --cov-report=term-missing --cov-fail-under=95 tests/test_security.py
 
   frontend-quality:
     name: Frontend Lint & Typecheck
