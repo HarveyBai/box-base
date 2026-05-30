@@ -190,3 +190,6 @@ ops/SECRETS.md
 *.db
 *.db-shm
 *.db-wal
+
+# Demo env config is intentionally tracked
+!backend/.env
