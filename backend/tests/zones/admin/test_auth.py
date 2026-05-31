@@ -9,6 +9,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.zones.admin.conftest import (
     NORMAL_EMAIL,
@@ -259,3 +260,148 @@ async def test_forged_tenant_id_rejected(client: AsyncClient) -> None:
         headers={"Authorization": f"Bearer {forged_token}"},
     )
     assert response.status_code == 403, response.text
+
+
+# ---------------------------------------------------------------------------
+# 补充：auth service 错误分支覆盖
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_register_duplicate_phone(client: AsyncClient) -> None:
+    """注册重复手机号 → 409"""
+    phone = "+8613800000001"
+    await client.post(
+        "/api/auth/register",
+        json={
+            "username": "phoneuser1",
+            "email": "phoneuser1@example.com",
+            "phone": phone,
+            "password": "password123",
+        },
+    )
+    resp = await client.post(
+        "/api/auth/register",
+        json={
+            "username": "phoneuser2",
+            "email": "phoneuser2@example.com",
+            "phone": phone,
+            "password": "password123",
+        },
+    )
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "USER_ALREADY_EXISTS"
+
+
+@pytest.mark.asyncio
+async def test_login_inactive_user(client: AsyncClient, db_session: AsyncSession) -> None:
+    """inactive 用户登录 → 401"""
+    from boxbase.zones.admin.models.user import User
+
+    # 注册后通过 DB 将 is_active 设为 False
+    register_resp = await client.post(
+        "/api/auth/register",
+        json={
+            "username": "inactiveuser",
+            "email": "inactive@example.com",
+            "password": "password123",
+        },
+    )
+    assert register_resp.status_code == 201
+    user_id = uuid.UUID(register_resp.json()["id"])
+
+    # 直接通过 DB 设为 inactive
+    from sqlalchemy import select as sa_select
+
+    result = await db_session.execute(sa_select(User).where(User.id == user_id))
+    user = result.scalar_one()
+    user.is_active = False
+    await db_session.commit()
+
+    # 用正确密码登录，但 is_active=False
+    resp = await client.post(
+        "/api/auth/login",
+        json={
+            "username": "inactiveuser",
+            "password": "password123",
+        },
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_login_with_explicit_tenant(client: AsyncClient, superadmin_token: str) -> None:
+    """登录时显式指定 tenant_id → 200"""
+    # 先获取 superadmin 的 tenant 列表
+    resp = await client.get(
+        "/api/auth/tenants",
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 200
+    tenants = resp.json()
+    assert len(tenants) > 0
+    tenant_id = tenants[0]["tenant_id"]
+
+    resp = await client.post(
+        "/api/auth/login",
+        json={
+            "username": SUPERADMIN_USERNAME,
+            "password": SUPERADMIN_PASSWORD,
+            "tenant_id": tenant_id,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["active_tenant_id"] == tenant_id
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_tenant(client: AsyncClient) -> None:
+    """登录时指定不存在的 tenant_id → 401"""
+    resp = await client.post(
+        "/api/auth/login",
+        json={
+            "username": SUPERADMIN_USERNAME,
+            "password": SUPERADMIN_PASSWORD,
+            "tenant_id": str(uuid.uuid4()),
+        },
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_missing_jti(client: AsyncClient) -> None:
+    """refresh token claims 缺少 jti → 401"""
+    import jwt
+
+    from boxbase.core.config import settings
+
+    # 签一个没有 jti 的 refresh token
+    bad_token = jwt.encode(
+        {"sub": "test", "type": "refresh"},
+        settings.secret_key,
+        algorithm="HS256",
+    )
+    resp = await client.post("/api/auth/refresh", json={"refresh_token": bad_token})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_switch_tenant_not_member(client: AsyncClient, superadmin_token: str) -> None:
+    """切换到未加入的租户 → 404"""
+    resp = await client.post(
+        "/api/auth/switch-tenant",
+        json={"tenant_id": str(uuid.uuid4())},
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_my_tenants_success(client: AsyncClient, superadmin_token: str) -> None:
+    """获取我的租户列表 → 200，至少 1 条"""
+    resp = await client.get(
+        "/api/auth/tenants",
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()) >= 1

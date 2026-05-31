@@ -184,3 +184,63 @@ async def test_normal_user_blocked_admin(
         headers={"Authorization": f"Bearer {normal_token}"},
     )
     assert response.status_code == 403, response.text
+
+
+# ---------------------------------------------------------------------------
+# 补充：users service 错误分支覆盖
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_me_superadmin_flag(client: AsyncClient, superadmin_token: str) -> None:
+    """superadmin 的 /users/me 返回 is_superadmin=True"""
+    resp = await client.get(
+        "/api/users/me",
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["is_superadmin"] is True
+
+
+@pytest.mark.asyncio
+async def test_invite_nonexistent_user(client: AsyncClient, superadmin_token: str) -> None:
+    """邀请不存在的用户 → 404 USER_NOT_FOUND"""
+    resp = await client.post(
+        "/api/users",
+        json={"username_or_email": "nobody_at_all@example.com"},
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["code"] == "USER_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_update_membership_not_found(client: AsyncClient, superadmin_token: str) -> None:
+    """更新不存在的 membership → 404"""
+    resp = await client.patch(
+        f"/api/memberships/{uuid.uuid4()}",
+        json={"status": "disabled"},
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_remove_membership_not_found(client: AsyncClient, superadmin_token: str) -> None:
+    """删除不存在的 membership → 404"""
+    resp = await client.delete(
+        f"/api/memberships/{uuid.uuid4()}",
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_list_all_users(client: AsyncClient, superadmin_token: str) -> None:
+    """/api/admin/users superadmin 可访问"""
+    resp = await client.get(
+        "/api/admin/users",
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)

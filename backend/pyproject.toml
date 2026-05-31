@@ -54,4 +54,6 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.coverage.run]
+source = ["boxbase"]
 omit = ["boxbase/tools/*"]
+concurrency = ["thread", "greenlet"]

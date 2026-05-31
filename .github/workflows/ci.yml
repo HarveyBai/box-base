@@ -40,7 +40,7 @@ jobs:
         run: uv run pytest -v --tb=short --cov=boxbase --cov-report=term-missing --cov-fail-under=80
 
       - name: Security module coverage gate (>= 95%)
-        run: uv run pytest -v --cov=boxbase.security --cov-report=term-missing --cov-fail-under=95 tests/test_security.py
+        run: uv run pytest -v --cov=boxbase.core.security --cov-report=term-missing --cov-fail-under=95 tests/test_security.py
 
   frontend-quality:
     name: Frontend Lint & Typecheck

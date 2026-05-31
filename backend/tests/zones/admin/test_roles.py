@@ -163,3 +163,40 @@ async def test_cross_tenant_blocked(
         headers={"Authorization": f"Bearer {forged_token}"},
     )
     assert response.status_code == 403, response.text
+
+
+# ---------------------------------------------------------------------------
+# 补充：roles service 错误分支覆盖
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_assign_permissions_role_not_found(client: AsyncClient, superadmin_token: str) -> None:
+    """给不存在的 role 分配权限 → 404"""
+    resp = await client.put(
+        f"/api/roles/{uuid.uuid4()}/permissions",
+        json={"permission_ids": []},
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_role_no_permission(client: AsyncClient, normal_token: str) -> None:
+    """无 role:write 权限用户创建角色 → 403"""
+    resp = await client.post(
+        "/api/roles",
+        json={"name": "hacker_role"},
+        headers={"Authorization": f"Bearer {normal_token}"},
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_roles_no_permission(client: AsyncClient, normal_token: str) -> None:
+    """无 role:read 权限用户列角色 → 403"""
+    resp = await client.get(
+        "/api/roles",
+        headers={"Authorization": f"Bearer {normal_token}"},
+    )
+    assert resp.status_code == 403
