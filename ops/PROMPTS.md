@@ -54,7 +54,7 @@
 
 你的角色是本地的AI IDE，请先阅读一下项目根目录下的 AGENTS.md 和 我发给你的任务进度归档 文件，我们同步一下信息然后开始今天的工作。
 
-将本地还没有提交的代码提交到 Git 仓库，建议 commit message：docs: add Week 2 Day 2 complete archive (slice 1-9)，任务完成后全部push到远程仓库。
+将本地还没有提交的代码提交到 Git 仓库，建议 commit message：docs: add Week 2 Day 3 archive and update architecture spec
 
 ---
 
