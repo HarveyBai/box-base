@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 
@@ -19,3 +24,29 @@ class ErrorCode:
     PERMISSION_DENIED = "PERMISSION_DENIED"
     ROLE_NOT_FOUND = "ROLE_NOT_FOUND"
     VALIDATION_ERROR = "VALIDATION_ERROR"
+
+
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """将 HTTPException 统一转为 ErrorResponse 格式输出"""
+    if isinstance(exc.detail, dict) and "code" in exc.detail:
+        content = exc.detail
+    else:
+        content = ErrorResponse(
+            code=ErrorCode.VALIDATION_ERROR,
+            message=str(exc.detail) if exc.detail else "An error occurred",
+        ).model_dump()
+    return JSONResponse(status_code=exc.status_code, content=content)
+
+
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """将 Pydantic 422 校验错误统一转为 ErrorResponse 格式输出"""
+    return JSONResponse(
+        status_code=422,
+        content=ErrorResponse(
+            code=ErrorCode.VALIDATION_ERROR,
+            message=str(exc.errors()),
+        ).model_dump(),
+    )
