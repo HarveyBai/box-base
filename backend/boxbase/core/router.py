@@ -8,8 +8,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
 from boxbase import __version__
+from boxbase.zones.admin.router import router as admin_router
 
 api_router = APIRouter()
+api_router.include_router(admin_router)
 
 
 class HealthResponse(BaseModel):
