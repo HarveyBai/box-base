@@ -10,12 +10,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from boxbase.config import settings
-from boxbase.dependencies import apply_soft_delete_filter, apply_tenant_filter
-from boxbase.models.membership import Membership
-from boxbase.models.refresh_token import RefreshToken
-from boxbase.models.user import User
-from boxbase.security import (
+from boxbase.core.config import settings
+from boxbase.core.dependencies import apply_soft_delete_filter, apply_tenant_filter
+from boxbase.core.security import (
     create_access_token,
     create_refresh_token,
     decode_access_token,
@@ -24,6 +21,9 @@ from boxbase.security import (
     rotate_refresh_token,
     verify_password,
 )
+from boxbase.zones.admin.models.membership import Membership
+from boxbase.zones.admin.models.refresh_token import RefreshToken
+from boxbase.zones.admin.models.user import User
 
 pytestmark = pytest.mark.asyncio
 
@@ -283,7 +283,7 @@ async def test_get_current_user_superadmin_short_circuit(
     """超管 username 命中 → is_superadmin=True，不查 DB。"""
     from fastapi.security import HTTPAuthorizationCredentials
 
-    from boxbase.security import get_current_user
+    from boxbase.core.security import get_current_user
 
     uid = uuid.uuid4()
     tid = uuid.uuid4()
@@ -302,7 +302,7 @@ async def test_get_current_user_normal_with_membership(
     """普通用户 + 有效 active membership → 放行，is_superadmin=False。"""
     from fastapi.security import HTTPAuthorizationCredentials
 
-    from boxbase.security import get_current_user
+    from boxbase.core.security import get_current_user
 
     uid = uuid.uuid4()
     tid = uuid.uuid4()
@@ -340,7 +340,7 @@ async def test_get_current_user_no_membership_raises(
     from fastapi import HTTPException
     from fastapi.security import HTTPAuthorizationCredentials
 
-    from boxbase.security import get_current_user
+    from boxbase.core.security import get_current_user
 
     uid = uuid.uuid4()
     tid = uuid.uuid4()

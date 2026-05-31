@@ -14,9 +14,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from alembic import context
-from boxbase.config import settings
-from boxbase.database import engine
-from boxbase.models.base import Base
+from boxbase.core.base import Base
+from boxbase.core.config import settings
+from boxbase.core.database import engine
 
 # Alembic Config 对象，提供 .ini 文件中的值
 config = context.config
@@ -25,7 +25,6 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 本片无业务表，target_metadata 为 None；切片 2 起改为 Base.metadata
 target_metadata = Base.metadata
 
 

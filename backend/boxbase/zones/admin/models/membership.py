@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, Index, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from boxbase.models.base import AuditMixin, Base
+from boxbase.core.base import AuditMixin, Base
 
 
 class Membership(AuditMixin, Base):

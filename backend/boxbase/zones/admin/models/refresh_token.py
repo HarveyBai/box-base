@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Index, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from boxbase.models.base import AuditMixin, Base
+from boxbase.core.base import AuditMixin, Base
 
 
 class RefreshToken(AuditMixin, Base):

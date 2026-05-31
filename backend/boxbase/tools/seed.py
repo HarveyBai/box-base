@@ -21,16 +21,16 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from boxbase.config import settings
-from boxbase.database import session_factory
-from boxbase.models.membership import Membership
-from boxbase.models.membership_role import MembershipRole
-from boxbase.models.permission import Permission
-from boxbase.models.role import Role
-from boxbase.models.role_permission import RolePermission
-from boxbase.models.tenant import Tenant
-from boxbase.models.user import User
-from boxbase.security import hash_password
+from boxbase.core.config import settings
+from boxbase.core.database import session_factory
+from boxbase.core.security import hash_password
+from boxbase.zones.admin.models.membership import Membership
+from boxbase.zones.admin.models.membership_role import MembershipRole
+from boxbase.zones.admin.models.permission import Permission
+from boxbase.zones.admin.models.role import Role
+from boxbase.zones.admin.models.role_permission import RolePermission
+from boxbase.zones.admin.models.tenant import Tenant
+from boxbase.zones.admin.models.user import User
 
 # --------------------------------------------------------------------------- #
 # 常量

@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from boxbase.config import settings
+from boxbase.core.config import settings
 
 engine = create_async_engine(settings.database_url, echo=False)
 

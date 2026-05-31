@@ -10,8 +10,8 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import Select, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from boxbase.database import get_db
-from boxbase.models.membership import Membership
+from boxbase.core.database import get_db
+from boxbase.zones.admin.models.membership import Membership
 
 
 @dataclass

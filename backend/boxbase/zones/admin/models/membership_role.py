@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import Index, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from boxbase.models.base import AuditMixin, Base
+from boxbase.core.base import AuditMixin, Base
 
 
 class MembershipRole(AuditMixin, Base):

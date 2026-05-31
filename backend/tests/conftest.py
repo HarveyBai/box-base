@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from boxbase.models import Base
+from boxbase.core.base import Base
 
 
 @pytest_asyncio.fixture

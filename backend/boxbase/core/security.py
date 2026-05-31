@@ -13,12 +13,12 @@ from pwdlib import PasswordHash
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from boxbase.config import settings
-from boxbase.database import get_db
-from boxbase.dependencies import RequestContext
-from boxbase.models.membership import Membership
-from boxbase.models.refresh_token import RefreshToken
-from boxbase.models.user import User
+from boxbase.core.config import settings
+from boxbase.core.database import get_db
+from boxbase.core.dependencies import RequestContext
+from boxbase.zones.admin.models.membership import Membership
+from boxbase.zones.admin.models.refresh_token import RefreshToken
+from boxbase.zones.admin.models.user import User
 
 # --------------------------------------------------------------------------- #
 # 密码哈希
