@@ -456,16 +456,11 @@ async def test_graceful_concurrent_refresh(client: AsyncClient) -> None:
     # 两次并发产出相同的 successor_jti（Branch B 只读不改指针）
     jti_a = decode_refresh_token(token1["refresh_token"])["jti"]
     jti_b = decode_refresh_token(token2["refresh_token"])["jti"]
-    assert jti_b == jti_a, (
-        "Branch B 应返回与 Branch A 相同的 successor_jti，"
-        f"但得到: A={jti_a} B={jti_b}"
-    )
+    assert jti_b == jti_a, f"Branch B 应返回与 Branch A 相同的 successor_jti，但得到: A={jti_a} B={jti_b}"
 
 
 @pytest.mark.asyncio
-async def test_rotation_branch_b_deterministic(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_rotation_branch_b_deterministic(client: AsyncClient, db_session: AsyncSession) -> None:
     """确定性测试 Branch B 纯读路径：无孤儿 active 行。
 
     方案：先 commit 第一个 rotation 制造 revoked+successor_jti 状态，
@@ -510,15 +505,12 @@ async def test_rotation_branch_b_deterministic(
     successor_jti = successor_claims["jti"]
 
     # 验证 DB 中旧行有 successor_jti 指针
-    result = await db_session.execute(
-        sa_select(RefreshToken).where(RefreshToken.jti == old_jti)
-    )
+    result = await db_session.execute(sa_select(RefreshToken).where(RefreshToken.jti == old_jti))
     old_row = result.scalar_one()
     assert old_row.status == "revoked", f"旧行应为 revoked，实际: {old_row.status}"
     assert old_row.revoked_reason == "rotation", "revoke 原因应为 rotation"
     assert old_row.successor_jti == successor_jti, (
-        f"旧行 successor_jti 应指向 {successor_jti}，"
-        f"实际: {old_row.successor_jti}"
+        f"旧行 successor_jti 应指向 {successor_jti}，实际: {old_row.successor_jti}"
     )
 
     # 记录当前该用户 active 行数
@@ -541,28 +533,19 @@ async def test_rotation_branch_b_deterministic(
     jti_b = claims_b["jti"]
 
     # Branch B 必须返回与 successor_jti 相同的 jti
-    assert jti_b == successor_jti, (
-        f"Branch B jti 应等于 successor_jti {successor_jti}，"
-        f"但得到 {jti_b}"
-    )
+    assert jti_b == successor_jti, f"Branch B jti 应等于 successor_jti {successor_jti}，但得到 {jti_b}"
 
     # Branch B 不应插入新行：active 行数不变
     result = await db_session.execute(active_stmt)
     active_after = len(result.scalars().all())
-    assert active_after == active_before, (
-        f"Branch B 不应新增 active 行: before={active_before}, after={active_after}"
-    )
+    assert active_after == active_before, f"Branch B 不应新增 active 行: before={active_before}, after={active_after}"
 
     # 该用户总共只有 1 个 active 行（不是 2 个）
-    assert active_after == 1, (
-        f"该用户应有且仅有 1 个 active refresh token 行，实际: {active_after}"
-    )
+    assert active_after == 1, f"该用户应有且仅有 1 个 active refresh token 行，实际: {active_after}"
 
 
 @pytest.mark.asyncio
-async def test_switch_tenant_no_successor_returns_401(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_switch_tenant_no_successor_returns_401(client: AsyncClient, db_session: AsyncSession) -> None:
     """模拟 switch_tenant 场景：revoked_reason="rotation" 但无 successor_jti → Branch B 应 401。
 
     switch_tenant 不做 successor 指针，旧 jti 在宽限内也应被拒绝。
@@ -593,9 +576,7 @@ async def test_switch_tenant_no_successor_returns_401(
     old_jti = old_claims["jti"]
 
     # 通过 DB 直接 revoke 该 token（模拟 switch_tenant：无 successor_jti）
-    result = await db_session.execute(
-        sa_select(RefreshToken).where(RefreshToken.jti == old_jti)
-    )
+    result = await db_session.execute(sa_select(RefreshToken).where(RefreshToken.jti == old_jti))
     old_row = result.scalar_one()
     old_row.status = "revoked"
     old_row.revoked_at = datetime.now(UTC)
@@ -608,9 +589,7 @@ async def test_switch_tenant_no_successor_returns_401(
         "/api/auth/refresh",
         json={"refresh_token": old_refresh_token},
     )
-    assert resp.status_code == 401, (
-        f"无 successor_jti 时即使宽限也应为 401，实际: {resp.status_code}"
-    )
+    assert resp.status_code == 401, f"无 successor_jti 时即使宽限也应为 401，实际: {resp.status_code}"
     assert resp.json()["code"] == "AUTH_INVALID_TOKEN"
 
 
@@ -653,9 +632,7 @@ async def test_logout_revoked_no_grace(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cleanup_expired_deletes_only_expired(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_cleanup_expired_deletes_only_expired(client: AsyncClient, db_session: AsyncSession) -> None:
     """清理函数只删过期 token，不动未过期的 active token。"""
     from datetime import UTC, datetime, timedelta
 
@@ -696,21 +673,15 @@ async def test_cleanup_expired_deletes_only_expired(
     # 验证：过期 token 已删除，未过期 token 仍存在
     from sqlalchemy import select as sa_select
 
-    result = await db_session.execute(
-        sa_select(RefreshToken).where(RefreshToken.jti == expired_jti)
-    )
+    result = await db_session.execute(sa_select(RefreshToken).where(RefreshToken.jti == expired_jti))
     assert result.scalar_one_or_none() is None, "Expired token should be deleted"
 
-    result = await db_session.execute(
-        sa_select(RefreshToken).where(RefreshToken.jti == active_jti)
-    )
+    result = await db_session.execute(sa_select(RefreshToken).where(RefreshToken.jti == active_jti))
     assert result.scalar_one_or_none() is not None, "Active token should remain"
 
 
 @pytest.mark.asyncio
-async def test_cleanup_no_expired_returns_zero(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_cleanup_no_expired_returns_zero(client: AsyncClient, db_session: AsyncSession) -> None:
     """没有过期 token 时返回 0，不影响任何记录。"""
     from sqlalchemy import select as sa_select
 
@@ -720,20 +691,14 @@ async def test_cleanup_no_expired_returns_zero(
     deleted = await cleanup_expired_refresh_tokens(db_session)
     assert deleted >= 0
     # 所有正常 token（如 seed 产生的登录 token）都不应被删
-    result = await db_session.execute(
-        sa_select(RefreshToken).where(RefreshToken.deleted_at.is_(None))
-    )
+    result = await db_session.execute(sa_select(RefreshToken).where(RefreshToken.deleted_at.is_(None)))
     count_before = len(result.scalars().all())
 
     deleted = await cleanup_expired_refresh_tokens(db_session)
-    result = await db_session.execute(
-        sa_select(RefreshToken).where(RefreshToken.deleted_at.is_(None))
-    )
+    result = await db_session.execute(sa_select(RefreshToken).where(RefreshToken.deleted_at.is_(None)))
     count_after = len(result.scalars().all())
 
-    assert count_before == count_after, (
-        f"No tokens should be deleted: {count_before} vs {count_after}"
-    )
+    assert count_before == count_after, f"No tokens should be deleted: {count_before} vs {count_after}"
     assert deleted == 0
 
 
@@ -743,9 +708,7 @@ async def test_cleanup_no_expired_returns_zero(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_endpoint_superadmin_success(
-    client: AsyncClient, superadmin_token: str
-) -> None:
+async def test_cleanup_endpoint_superadmin_success(client: AsyncClient, superadmin_token: str) -> None:
     """超管调用清理端点 → 200，返回 deleted count。"""
     resp = await client.post(
         "/api/admin/maintenance/cleanup-refresh-tokens",
@@ -759,9 +722,7 @@ async def test_cleanup_endpoint_superadmin_success(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_endpoint_normal_user_forbidden(
-    client: AsyncClient, normal_token: str
-) -> None:
+async def test_cleanup_endpoint_normal_user_forbidden(client: AsyncClient, normal_token: str) -> None:
     """普通用户调用清理端点 → 403。"""
     resp = await client.post(
         "/api/admin/maintenance/cleanup-refresh-tokens",
