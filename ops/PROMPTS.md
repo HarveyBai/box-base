@@ -57,7 +57,7 @@
 
 你的角色是本地的AI IDE，请严格按照下边的提示词开展工作，汇报结果：
 
-将本地还没有提交的代码提交到 Git 仓库，建议 commit message：docs: add Week 2 Day 3 archive and update architecture spec
+将本地还没有提交的代码提交到 Git 仓库，建议 commit message：docs: add Week 2 Day 4 archive
 
 ---
 
