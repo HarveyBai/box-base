@@ -20,6 +20,10 @@ class RefreshToken(AuditMixin, Base):
     revoked_reason：revoke 原因 — "rotation" | "logout" | "switch_tenant"。
         只有 "rotation" 原因且 revoke 在宽限窗口内时享受并发容错；
         "logout" 主动注销的 jti 永不放行。
+    successor_jti：rotation 时新签发的 jti（仅存 jti 字符串，不存 token 原文）。
+        Branch A（首次 refresh）写此字段，Branch B（并发 refresh）读取此字段
+        来重签相同 jti，确保不会产生孤儿 active 行。
+        非 rotation revoke（logout/switch_tenant）时为 NULL。
     tenant_id：签发时的活跃租户，row-level 隔离。
     expires_at：过期时间戳，索引用于清理过期记录。
     索引：jti 唯一索引、(tenant_id, user_id) 联合索引、expires_at 索引。
@@ -41,3 +45,4 @@ class RefreshToken(AuditMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    successor_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)

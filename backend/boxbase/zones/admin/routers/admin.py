@@ -9,7 +9,8 @@ from boxbase.core.exceptions import ErrorCode, ErrorResponse
 from boxbase.core.security import get_current_user
 from boxbase.zones.admin.models.tenant import Tenant
 from boxbase.zones.admin.models.user import User
-from boxbase.zones.admin.schemas import TenantResponse, UserResponse
+from boxbase.zones.admin.schemas import CleanupResponse, TenantResponse, UserResponse
+from boxbase.zones.admin.services.auth import cleanup_expired_refresh_tokens
 
 router = APIRouter()
 
@@ -48,3 +49,17 @@ async def list_all_users(
     result = await db.execute(stmt)
     users = result.scalars().all()
     return [UserResponse.model_validate(u) for u in users]
+
+
+@router.post(
+    "/admin/maintenance/cleanup-refresh-tokens",
+    response_model=CleanupResponse,
+)
+async def cleanup_tokens(
+    ctx: RequestContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CleanupResponse:
+    """删除所有已过期的 refresh token（仅限 superadmin）。"""
+    _require_superadmin(ctx)
+    deleted = await cleanup_expired_refresh_tokens(db)
+    return CleanupResponse(deleted=deleted)

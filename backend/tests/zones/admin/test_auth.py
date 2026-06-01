@@ -417,8 +417,13 @@ async def test_graceful_concurrent_refresh(client: AsyncClient) -> None:
     """并发 refresh 相同 jti → 宽限窗口内放行，两个都返回 200。
 
     模拟：两个请求用同一个 refresh_token 几乎同时刷新，
-    第一个正常 rotation，第二个因宽限窗口被容错放行。
+    第一个正常 rotation（Branch A → INSERT 新行），
+    第二个因宽限窗口走纯读路径（Branch B → 读取 successor_jti 重签）。
+
+    两个请求拿到的 token jti 应该相同（都是 successor_jti）。
     """
+    from boxbase.core.security import decode_refresh_token
+
     # 登录获取 refresh_token
     login_resp = await client.post(
         "/api/auth/login",
@@ -430,7 +435,7 @@ async def test_graceful_concurrent_refresh(client: AsyncClient) -> None:
     assert login_resp.status_code == 200
     refresh_token = login_resp.json()["refresh_token"]
 
-    # 第一次 refresh → 200，正常 rotation
+    # 第一次 refresh → 200，正常 rotation（Branch A — 唯一插入）
     resp1 = await client.post(
         "/api/auth/refresh",
         json={"refresh_token": refresh_token},
@@ -439,7 +444,7 @@ async def test_graceful_concurrent_refresh(client: AsyncClient) -> None:
     token1 = resp1.json()
     assert token1["refresh_token"] != refresh_token
 
-    # 第二次用 同一个 jti 再 refresh → 宽限放行，200
+    # 第二次用 同一个 jti 再 refresh → 宽限放行（Branch B — 纯读）
     resp2 = await client.post(
         "/api/auth/refresh",
         json={"refresh_token": refresh_token},
@@ -447,8 +452,166 @@ async def test_graceful_concurrent_refresh(client: AsyncClient) -> None:
     assert resp2.status_code == 200, f"宽限窗口内应放行: {resp2.text}"
     token2 = resp2.json()
     assert token2["refresh_token"] != refresh_token
-    # 两次并发产出的是不同的新 jti
-    assert token2["refresh_token"] != token1["refresh_token"]
+
+    # 两次并发产出相同的 successor_jti（Branch B 只读不改指针）
+    jti_a = decode_refresh_token(token1["refresh_token"])["jti"]
+    jti_b = decode_refresh_token(token2["refresh_token"])["jti"]
+    assert jti_b == jti_a, (
+        "Branch B 应返回与 Branch A 相同的 successor_jti，"
+        f"但得到: A={jti_a} B={jti_b}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rotation_branch_b_deterministic(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """确定性测试 Branch B 纯读路径：无孤儿 active 行。
+
+    方案：先 commit 第一个 rotation 制造 revoked+successor_jti 状态，
+    再用旧 jti 发第二个 refresh，确认走 Branch B 纯读路径返回 successor_jti、
+    且不新增 active 行（active count = 1，不是 2）。
+
+    此测试是「真正能验证 Branch B 不插入」的底线覆盖。
+    """
+
+    from sqlalchemy import select as sa_select
+
+    from boxbase.core.security import decode_refresh_token
+    from boxbase.zones.admin.models.refresh_token import RefreshToken
+
+    assert SeedData.superadmin_user is not None
+    assert SeedData.system_tenant is not None
+
+    user_id = SeedData.superadmin_user.id
+
+    # Step 1：通过登录获取一个真实的 refresh_token
+    login_resp = await client.post(
+        "/api/auth/login",
+        json={
+            "username": SUPERADMIN_USERNAME,
+            "password": SUPERADMIN_PASSWORD,
+        },
+    )
+    assert login_resp.status_code == 200
+    old_refresh_token = login_resp.json()["refresh_token"]
+    old_claims = decode_refresh_token(old_refresh_token)
+    old_jti = old_claims["jti"]
+
+    # Step 2：第一次 refresh（Branch A → rotation），拿到 successor
+    resp_a = await client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": old_refresh_token},
+    )
+    assert resp_a.status_code == 200, f"Branch A failed: {resp_a.text}"
+    token_a = resp_a.json()
+    successor_refresh = token_a["refresh_token"]
+    successor_claims = decode_refresh_token(successor_refresh)
+    successor_jti = successor_claims["jti"]
+
+    # 验证 DB 中旧行有 successor_jti 指针
+    result = await db_session.execute(
+        sa_select(RefreshToken).where(RefreshToken.jti == old_jti)
+    )
+    old_row = result.scalar_one()
+    assert old_row.status == "revoked", f"旧行应为 revoked，实际: {old_row.status}"
+    assert old_row.revoked_reason == "rotation", "revoke 原因应为 rotation"
+    assert old_row.successor_jti == successor_jti, (
+        f"旧行 successor_jti 应指向 {successor_jti}，"
+        f"实际: {old_row.successor_jti}"
+    )
+
+    # 记录当前该用户 active 行数
+    active_stmt = sa_select(RefreshToken).where(
+        RefreshToken.user_id == user_id,
+        RefreshToken.status == "active",
+        RefreshToken.deleted_at.is_(None),
+    )
+    result = await db_session.execute(active_stmt)
+    active_before = len(result.scalars().all())
+
+    # Step 3：用 OLD jti 发第二个 refresh（Branch B — 纯读路径）
+    resp_b = await client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": old_refresh_token},
+    )
+    assert resp_b.status_code == 200, f"Branch B failed: {resp_b.text}"
+    token_b = resp_b.json()
+    claims_b = decode_refresh_token(token_b["refresh_token"])
+    jti_b = claims_b["jti"]
+
+    # Branch B 必须返回与 successor_jti 相同的 jti
+    assert jti_b == successor_jti, (
+        f"Branch B jti 应等于 successor_jti {successor_jti}，"
+        f"但得到 {jti_b}"
+    )
+
+    # Branch B 不应插入新行：active 行数不变
+    result = await db_session.execute(active_stmt)
+    active_after = len(result.scalars().all())
+    assert active_after == active_before, (
+        f"Branch B 不应新增 active 行: before={active_before}, after={active_after}"
+    )
+
+    # 该用户总共只有 1 个 active 行（不是 2 个）
+    assert active_after == 1, (
+        f"该用户应有且仅有 1 个 active refresh token 行，实际: {active_after}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_switch_tenant_no_successor_returns_401(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """模拟 switch_tenant 场景：revoked_reason="rotation" 但无 successor_jti → Branch B 应 401。
+
+    switch_tenant 不做 successor 指针，旧 jti 在宽限内也应被拒绝。
+    通过 DB 模拟 revoked（reason="rotation"，successor_jti=NULL），
+    验证 Branch B 的纯读路径在无 successor_jti 时正确返回 401。
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select as sa_select
+
+    from boxbase.core.security import decode_refresh_token
+    from boxbase.zones.admin.models.refresh_token import RefreshToken
+
+    assert SeedData.superadmin_user is not None
+    assert SeedData.system_tenant is not None
+
+    # 登录获取 refresh_token
+    login_resp = await client.post(
+        "/api/auth/login",
+        json={
+            "username": SUPERADMIN_USERNAME,
+            "password": SUPERADMIN_PASSWORD,
+        },
+    )
+    assert login_resp.status_code == 200
+    old_refresh_token = login_resp.json()["refresh_token"]
+    old_claims = decode_refresh_token(old_refresh_token)
+    old_jti = old_claims["jti"]
+
+    # 通过 DB 直接 revoke 该 token（模拟 switch_tenant：无 successor_jti）
+    result = await db_session.execute(
+        sa_select(RefreshToken).where(RefreshToken.jti == old_jti)
+    )
+    old_row = result.scalar_one()
+    old_row.status = "revoked"
+    old_row.revoked_at = datetime.now(UTC)
+    old_row.revoked_reason = "rotation"
+    old_row.successor_jti = None  # 关键：无指针
+    await db_session.commit()
+
+    # 在宽限窗口内用旧 jti refresh → 应 401（无 successor 放行）
+    resp = await client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": old_refresh_token},
+    )
+    assert resp.status_code == 401, (
+        f"无 successor_jti 时即使宽限也应为 401，实际: {resp.status_code}"
+    )
+    assert resp.json()["code"] == "AUTH_INVALID_TOKEN"
 
 
 @pytest.mark.asyncio
@@ -484,8 +647,133 @@ async def test_logout_revoked_no_grace(client: AsyncClient) -> None:
     assert resp.json()["code"] == "AUTH_INVALID_TOKEN"
 
 
+# ---------------------------------------------------------------------------
+# 过期 token 清理
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
-async def test_grace_window_expired(client: AsyncClient, monkeypatch) -> None:
+async def test_cleanup_expired_deletes_only_expired(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """清理函数只删过期 token，不动未过期的 active token。"""
+    from datetime import UTC, datetime, timedelta
+
+    from tests.zones.admin.conftest import SeedData
+
+    assert SeedData.system_tenant is not None
+    assert SeedData.superadmin_user is not None
+
+    from boxbase.zones.admin.models.refresh_token import RefreshToken
+    from boxbase.zones.admin.services.auth import cleanup_expired_refresh_tokens
+
+    now = datetime.now(UTC)
+    expired_jti = str(uuid.uuid4())
+    active_jti = str(uuid.uuid4())
+
+    expired = RefreshToken(
+        tenant_id=SeedData.system_tenant.id,
+        user_id=SeedData.superadmin_user.id,
+        jti=expired_jti,
+        status="active",
+        expires_at=now - timedelta(hours=1),
+    )
+    active = RefreshToken(
+        tenant_id=SeedData.system_tenant.id,
+        user_id=SeedData.superadmin_user.id,
+        jti=active_jti,
+        status="active",
+        expires_at=now + timedelta(days=30),
+    )
+    db_session.add(expired)
+    db_session.add(active)
+    await db_session.commit()
+
+    # 执行清理
+    deleted = await cleanup_expired_refresh_tokens(db_session)
+    assert deleted == 1, f"Expected 1 deleted, got {deleted}"
+
+    # 验证：过期 token 已删除，未过期 token 仍存在
+    from sqlalchemy import select as sa_select
+
+    result = await db_session.execute(
+        sa_select(RefreshToken).where(RefreshToken.jti == expired_jti)
+    )
+    assert result.scalar_one_or_none() is None, "Expired token should be deleted"
+
+    result = await db_session.execute(
+        sa_select(RefreshToken).where(RefreshToken.jti == active_jti)
+    )
+    assert result.scalar_one_or_none() is not None, "Active token should remain"
+
+
+@pytest.mark.asyncio
+async def test_cleanup_no_expired_returns_zero(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """没有过期 token 时返回 0，不影响任何记录。"""
+    from sqlalchemy import select as sa_select
+
+    from boxbase.zones.admin.models.refresh_token import RefreshToken
+    from boxbase.zones.admin.services.auth import cleanup_expired_refresh_tokens
+
+    deleted = await cleanup_expired_refresh_tokens(db_session)
+    assert deleted >= 0
+    # 所有正常 token（如 seed 产生的登录 token）都不应被删
+    result = await db_session.execute(
+        sa_select(RefreshToken).where(RefreshToken.deleted_at.is_(None))
+    )
+    count_before = len(result.scalars().all())
+
+    deleted = await cleanup_expired_refresh_tokens(db_session)
+    result = await db_session.execute(
+        sa_select(RefreshToken).where(RefreshToken.deleted_at.is_(None))
+    )
+    count_after = len(result.scalars().all())
+
+    assert count_before == count_after, (
+        f"No tokens should be deleted: {count_before} vs {count_after}"
+    )
+    assert deleted == 0
+
+
+# ---------------------------------------------------------------------------
+# 清理端点集成测试
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cleanup_endpoint_superadmin_success(
+    client: AsyncClient, superadmin_token: str
+) -> None:
+    """超管调用清理端点 → 200，返回 deleted count。"""
+    resp = await client.post(
+        "/api/admin/maintenance/cleanup-refresh-tokens",
+        headers={"Authorization": f"Bearer {superadmin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "deleted" in body
+    assert isinstance(body["deleted"], int)
+    assert body["deleted"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_endpoint_normal_user_forbidden(
+    client: AsyncClient, normal_token: str
+) -> None:
+    """普通用户调用清理端点 → 403。"""
+    resp = await client.post(
+        "/api/admin/maintenance/cleanup-refresh-tokens",
+        headers={"Authorization": f"Bearer {normal_token}"},
+    )
+    assert resp.status_code == 403, resp.text
+    body = resp.json()
+    assert body["code"] == "PERMISSION_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_grace_window_expired(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """宽限窗口过期后 rotation-revoked token → 401。
 
     模拟 revoked_at 超过宽限窗口的旧 jti，确认不放行。

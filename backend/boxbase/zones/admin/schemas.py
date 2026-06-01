@@ -147,3 +147,14 @@ class TenantResponse(OrmBase):
     name: str
     is_system: bool
     created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Maintenance schemas
+# ---------------------------------------------------------------------------
+
+
+class CleanupResponse(BaseModel):
+    """清理操作的结果响应。"""
+
+    deleted: int

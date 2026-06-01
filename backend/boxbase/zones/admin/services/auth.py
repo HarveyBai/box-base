@@ -205,60 +205,79 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession) -> TokenRespo
     if not jti:
         _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Invalid token claims.")
 
-    # 查 jti（不限 status，后面区分 active/revoked 处理）
+    from boxbase.core.config import settings
+
+    # 查 jti 并加锁（PG: 行级锁；SQLite: 由 BEGIN IMMEDIATE 全局串行化保证）
     result = await db.execute(  # type: ignore[arg-type]
-        select(RefreshToken).where(
+        select(RefreshToken)
+        .where(
             RefreshToken.jti == jti,
             RefreshToken.deleted_at.is_(None),
         )
+        .with_for_update()
     )
     token_record = result.scalar_one_or_none()
     if not token_record:
         _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked or not found.")
 
-    # ---- 并发宽限：rotation-revoked 且在窗口内 → 放行 ----
-    from boxbase.core.config import settings
-
-    if token_record.status == "revoked":  # type: ignore[union-attr]
-        if token_record.revoked_reason != "rotation":  # type: ignore[union-attr]
-            _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
-        rc = token_record.revoked_at  # type: ignore[union-attr]
-        if rc is None:
-            _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
-        # SQLite 可能返回无时区 datetime，统一补上 UTC
-        if rc.tzinfo is None:  # type: ignore[union-attr]
-            rc = rc.replace(tzinfo=UTC)  # type: ignore[union-attr]
-        now = datetime.now(UTC)
-        grace = float(settings.refresh_rotation_grace_seconds)
-        if (now - rc).total_seconds() > grace:  # type: ignore[operator]
-            _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
-        # 在宽限窗口内：并发容错，签发新 token pair（不修改原记录状态）
-    else:
-        # rotation：旧 jti → revoked（正常流程）
+    # ---- Branch A：status=active → 唯一负责插入新 active 行 ----
+    if token_record.status == "active":  # type: ignore[union-attr]
+        new_jti = str(uuid.uuid4())
         token_record.status = "revoked"  # type: ignore[union-attr]
         token_record.revoked_at = datetime.now(UTC)  # type: ignore[union-attr]
         token_record.revoked_reason = "rotation"  # type: ignore[union-attr]
+        token_record.successor_jti = new_jti  # type: ignore[union-attr]
         await db.flush()
+
+        # 查 username
+        user_result = await db.execute(select(User).where(User.id == token_record.user_id))  # type: ignore[arg-type,union-attr]
+        user = user_result.scalar_one_or_none()
+        username = user.username if user else ""  # type: ignore[union-attr]
+
+        # 插入新 active 行 — 仅 Branch A 执行此操作
+        db.add(
+            RefreshToken(
+                tenant_id=token_record.tenant_id,  # type: ignore[union-attr]
+                user_id=token_record.user_id,  # type: ignore[union-attr]
+                jti=new_jti,
+                status="active",
+                expires_at=token_record.expires_at,  # type: ignore[union-attr]
+            )
+        )
+        await db.commit()
+
+        return _make_token_response(token_record.user_id, token_record.tenant_id, new_jti, username)  # type: ignore[union-attr]
+
+    # ---- Branch B：status=revoked → 纯读路径，不插入新行 ----
+    if token_record.revoked_reason != "rotation":  # type: ignore[union-attr]
+        _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
+    rc = token_record.revoked_at  # type: ignore[union-attr]
+    if rc is None:
+        _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
+    # SQLite 可能返回无时区 datetime，统一补上 UTC
+    if rc.tzinfo is None:  # type: ignore[union-attr]
+        rc = rc.replace(tzinfo=UTC)  # type: ignore[union-attr]
+    now = datetime.now(UTC)
+    grace = float(settings.refresh_rotation_grace_seconds)
+    if (now - rc).total_seconds() > grace:  # type: ignore[operator]
+        _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
+
+    # 宽限窗口内：读取 successor_jti 用于重签
+    successor_jti = token_record.successor_jti  # type: ignore[union-attr]
+    if not successor_jti:
+        # 防御：非 refresh_token rotation 不会设 successor_jti
+        # （如 switch_tenant 设了 revoked_reason="rotation" 但无 successor_jti）
+        _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
 
     # 查 username
     user_result = await db.execute(select(User).where(User.id == token_record.user_id))  # type: ignore[arg-type,union-attr]
     user = user_result.scalar_one_or_none()
     username = user.username if user else ""  # type: ignore[union-attr]
 
-    # 新 jti
-    new_jti = str(uuid.uuid4())
-    db.add(
-        RefreshToken(
-            tenant_id=token_record.tenant_id,  # type: ignore[union-attr]
-            user_id=token_record.user_id,  # type: ignore[union-attr]
-            jti=new_jti,
-            status="active",
-            expires_at=token_record.expires_at,  # type: ignore[union-attr]
-        )
-    )
+    # 纯读路径：释放锁（无写操作），用 successor_jti 重签
     await db.commit()
 
-    return _make_token_response(token_record.user_id, token_record.tenant_id, new_jti, username)  # type: ignore[union-attr]
+    return _make_token_response(token_record.user_id, token_record.tenant_id, successor_jti, username)  # type: ignore[arg-type,union-attr]
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +369,31 @@ async def switch_tenant(
     await db.commit()
 
     return _make_token_response(current_user_id, payload.tenant_id, new_jti, username)
+
+
+# ---------------------------------------------------------------------------
+# cleanup_expired_refresh_tokens — 清理已过期的 refresh token
+# ---------------------------------------------------------------------------
+
+
+async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
+    """删除所有已过期的 refresh token（无论 active/revoked）。
+
+    过期 token 已无法使用，物理删除零风险。
+    未过期的 token（含在用的 active）一条不动。
+
+    Returns:
+        删除的记录条数。
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import delete
+
+    now = datetime.now(UTC)
+    stmt = delete(RefreshToken).where(RefreshToken.expires_at < now)  # type: ignore[arg-type]
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.rowcount  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
