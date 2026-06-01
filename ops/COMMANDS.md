@@ -1,6 +1,16 @@
 # COMMANDS.md — 常用命令备忘
 
 
+## 项目相关命令
+
+```bash
+mise run dev	        # 前端 5173 + 后端 8000 同时启动，两方日志可见
+mise run dev:frontend	# 仅启动前端 Vite dev server
+mise run dev:backend	# 仅启动后端 Uvicorn
+
+```
+
+
 ## git仓库
 
 ### ssh agent配置，解决每次push都输入密码的问题

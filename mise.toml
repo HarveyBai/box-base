@@ -1,0 +1,13 @@
+[tasks."dev:frontend"]
+description = "Start frontend dev server (Vite, port 5173)"
+run = "pnpm dev"
+dir = "frontend"
+
+[tasks."dev:backend"]
+description = "Start backend dev server (Uvicorn, port 8000 --reload)"
+run = "uv run uvicorn boxbase.main:app --reload --port 8000"
+dir = "backend"
+
+[tasks.dev]
+description = "Start both frontend and backend dev servers in parallel"
+depends = ["dev:frontend", "dev:backend"]

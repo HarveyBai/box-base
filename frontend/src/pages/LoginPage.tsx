@@ -1,28 +1,33 @@
 import { useState } from 'react'
-import { Button, Card, Checkbox, Form, Input, Space, Typography } from 'antd'
-import { Link } from 'react-router-dom'
+import { Button, Card, Form, Input, Space, Typography, message } from 'antd'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 
 const { Title } = Typography
 
 interface LoginFormValues {
   username: string
   password: string
-  remember: boolean
 }
 
 function LoginPage() {
   const [form] = Form.useForm<LoginFormValues>()
   const [loading, setLoading] = useState(false)
+  const { login } = useAuth()
+  const navigate = useNavigate()
 
-  const handleSubmit = (values: LoginFormValues) => {
-    // 暂时只打印到 console，不接后端 API（Week 2 接 FastAPI Users）
-    const { remember } = values
-    console.warn('Login submitted:', values, 'Remember me:', remember)
+  const handleSubmit = async (values: LoginFormValues) => {
     setLoading(true)
-    // 模拟 loading 效果，Week 2 替换为真实 API 调用
-    setTimeout(() => {
+    try {
+      await login({ username: values.username, password: values.password })
+      message.success('登录成功')
+      navigate('/dashboard', { replace: true })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '登录失败，请稍后重试'
+      message.error(msg)
+    } finally {
       setLoading(false)
-    }, 1000)
+    }
   }
 
   return (
@@ -39,7 +44,13 @@ function LoginPage() {
           <Title level={3} style={{ textAlign: 'center', margin: 0 }}>
             BoxBase 登录
           </Title>
-          <Form form={form} onFinish={handleSubmit} layout="vertical">
+          <Form
+            form={form}
+            onFinish={(values) => {
+              void handleSubmit(values)
+            }}
+            layout="vertical"
+          >
             <Form.Item
               label="用户名"
               name="username"
@@ -57,9 +68,6 @@ function LoginPage() {
             >
               <Input.Password placeholder="请输入密码" />
             </Form.Item>
-            <Form.Item name="remember" valuePropName="checked">
-              <Checkbox>记住我</Checkbox>
-            </Form.Item>
             <Form.Item>
               <Button type="primary" htmlType="submit" loading={loading} block>
                 登录
@@ -67,7 +75,7 @@ function LoginPage() {
             </Form.Item>
           </Form>
           <div style={{ textAlign: 'center' }}>
-            <Link to="/register">还没有账号？立即注册</Link>
+            <Link to="/register">没有账号？去注册</Link>
           </div>
         </Space>
       </Card>

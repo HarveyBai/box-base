@@ -205,11 +205,10 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession) -> TokenRespo
     if not jti:
         _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Invalid token claims.")
 
-    # 查 jti 白名单
+    # 查 jti（不限 status，后面区分 active/revoked 处理）
     result = await db.execute(  # type: ignore[arg-type]
         select(RefreshToken).where(
             RefreshToken.jti == jti,
-            RefreshToken.status == "active",
             RefreshToken.deleted_at.is_(None),
         )
     )
@@ -217,9 +216,29 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession) -> TokenRespo
     if not token_record:
         _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked or not found.")
 
-    # rotation：旧 jti → revoked
-    token_record.status = "revoked"  # type: ignore[union-attr]
-    await db.flush()
+    # ---- 并发宽限：rotation-revoked 且在窗口内 → 放行 ----
+    from boxbase.core.config import settings
+
+    if token_record.status == "revoked":  # type: ignore[union-attr]
+        if token_record.revoked_reason != "rotation":  # type: ignore[union-attr]
+            _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
+        rc = token_record.revoked_at  # type: ignore[union-attr]
+        if rc is None:
+            _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
+        # SQLite 可能返回无时区 datetime，统一补上 UTC
+        if rc.tzinfo is None:  # type: ignore[union-attr]
+            rc = rc.replace(tzinfo=UTC)  # type: ignore[union-attr]
+        now = datetime.now(UTC)
+        grace = float(settings.refresh_rotation_grace_seconds)
+        if (now - rc).total_seconds() > grace:  # type: ignore[operator]
+            _raise(401, ErrorCode.AUTH_INVALID_TOKEN, "Token has been revoked.")
+        # 在宽限窗口内：并发容错，签发新 token pair（不修改原记录状态）
+    else:
+        # rotation：旧 jti → revoked（正常流程）
+        token_record.status = "revoked"  # type: ignore[union-attr]
+        token_record.revoked_at = datetime.now(UTC)  # type: ignore[union-attr]
+        token_record.revoked_reason = "rotation"  # type: ignore[union-attr]
+        await db.flush()
 
     # 查 username
     user_result = await db.execute(select(User).where(User.id == token_record.user_id))  # type: ignore[arg-type,union-attr]
@@ -267,6 +286,8 @@ async def logout(payload: LogoutRequest, db: AsyncSession) -> None:
     token_record = result.scalar_one_or_none()
     if token_record:
         token_record.status = "revoked"  # type: ignore[union-attr]
+        token_record.revoked_at = datetime.now(UTC)  # type: ignore[union-attr]
+        token_record.revoked_reason = "logout"  # type: ignore[union-attr]
         await db.commit()
 
 
@@ -296,16 +317,18 @@ async def switch_tenant(
 
     # rotation：旧 jti → revoked
     if current_jti:
-        result = await db.execute(  # type: ignore[arg-type]
+        rt_result = await db.execute(  # type: ignore[arg-type]
             select(RefreshToken).where(
                 RefreshToken.jti == current_jti,
                 RefreshToken.status == "active",
                 RefreshToken.deleted_at.is_(None),
             )
         )
-        old_token = result.scalar_one_or_none()
+        old_token = rt_result.scalar_one_or_none()
         if old_token:
             old_token.status = "revoked"  # type: ignore[union-attr]
+            old_token.revoked_at = datetime.now(UTC)  # type: ignore[union-attr]
+            old_token.revoked_reason = "rotation"  # type: ignore[union-attr]
             await db.flush()
 
     # 查 username
@@ -346,4 +369,14 @@ async def get_my_tenants(
         )
     )
     memberships = result.scalars().all()
-    return [MembershipResponse.model_validate(m) for m in memberships]
+
+    # 为每条 membership 查询租户 name / slug
+    response_list: list[MembershipResponse] = []
+    for m in memberships:
+        t_result = await db.execute(select(Tenant).where(Tenant.id == m.tenant_id))  # type: ignore[arg-type]
+        tenant = t_result.scalar_one_or_none()
+        resp = MembershipResponse.model_validate(m)
+        resp.tenant_name = tenant.name if tenant else None  # type: ignore[union-attr]
+        resp.tenant_slug = tenant.slug if tenant else None  # type: ignore[union-attr]
+        response_list.append(resp)
+    return response_list

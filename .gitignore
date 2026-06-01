@@ -179,6 +179,12 @@ coverage.xml
 *.swp
 *.swo
 
+# Playwright
+.playwright-cli/
+test-results/
+playwright-report/
+e2e/.auth/
+
 # OS
 .DS_Store
 Thumbs.db

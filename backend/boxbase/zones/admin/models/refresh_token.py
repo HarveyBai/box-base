@@ -16,6 +16,10 @@ class RefreshToken(AuditMixin, Base):
 
     jti：JWT ID，明文 UUID 字符串，唯一索引，rotation 时旧 jti→revoked。
     status：active / revoked。
+    revoked_at：revoke 时间戳（用于并发宽限窗口判定）。
+    revoked_reason：revoke 原因 — "rotation" | "logout" | "switch_tenant"。
+        只有 "rotation" 原因且 revoke 在宽限窗口内时享受并发容错；
+        "logout" 主动注销的 jti 永不放行。
     tenant_id：签发时的活跃租户，row-level 隔离。
     expires_at：过期时间戳，索引用于清理过期记录。
     索引：jti 唯一索引、(tenant_id, user_id) 联合索引、expires_at 索引。
@@ -35,3 +39,5 @@ class RefreshToken(AuditMixin, Base):
     jti: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)

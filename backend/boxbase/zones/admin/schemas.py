@@ -89,6 +89,8 @@ class MembershipResponse(OrmBase):
     is_default: bool
     joined_at: datetime | None
     created_at: datetime
+    tenant_name: str | None = None
+    tenant_slug: str | None = None
 
 
 class InviteUserRequest(BaseModel):
