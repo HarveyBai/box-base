@@ -188,6 +188,7 @@ e2e/.auth/
 # OS
 .DS_Store
 Thumbs.db
+.tmp/
 
 # Project secrets (never commit)
 ops/SECRETS.md
