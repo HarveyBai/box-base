@@ -260,6 +260,7 @@ get_current_user → RequestContext（含超管 short-circuit + active membershi
 | `superadmin_username` | superadmin | 超管用户名，配置注入 |
 | `access_token_expire_minutes` | 30 | access token 有效期 |
 | `refresh_token_expire_days` | 7 | refresh token 有效期 |
+| `refresh_rotation_grace_seconds` | 10 | refresh token rotation 并发宽限窗口（秒） |
 
 ### 4.5 安全模块（core/security.py）
 
@@ -283,6 +284,12 @@ get_current_user → RequestContext（含超管 short-circuit + active membershi
 - **软删除过滤**：`apply_soft_delete_filter` 自动附加 `deleted_at IS NULL`
 - **PG RLS**：预留 hook，v1.0 不启用
 
+#### 5.1.1 refresh token rotation 并发治理
+
+- SQLite 通过 `core/database.py` 的 `BEGIN IMMEDIATE` 写事务串行化保护写冲突。
+- PostgreSQL 依赖 `SELECT ... FOR UPDATE` 对 refresh token 行加锁。
+- `refresh_rotation_grace_seconds` 定义宽限窗口，允许同一旧 jti 在 rotation 后短时间内走 Branch B 纯读路径。
+
 ### 5.2 admin 模块基础表（zones/admin/models/）
 
 详见 `docs/architecture/2026-W2-auth-tenant-rbac-design.md` 章节 3。
@@ -294,7 +301,7 @@ get_current_user → RequestContext（含超管 short-circuit + active membershi
 - `Tenant`：slug 全局唯一索引；`is_system=true` 标记系统/默认租户（同一条）
 - `Membership`：`UniqueConstraint(tenant_id, user_id)`；`is_default` 应用层保证每用户至多一条 active
 - `Role` / `Permission`：tenant-scoped，`UniqueConstraint(tenant_id, name/code)`
-- `RefreshToken`：jti 明文 UUID 唯一索引；status active/revoked
+- `RefreshToken`：jti 明文 UUID 字符串，String(64)；唯一索引 `ix_refresh_token_jti`；status active/revoked；`revoked_at` / `revoked_reason`（"rotation" / "logout"）/ `successor_jti`；Branch A/B 并发宽限重签机制
 
 ### 5.3 扩展模块 model 规范
 
@@ -313,9 +320,9 @@ get_current_user → RequestContext（含超管 short-circuit + active membershi
 
 - **注册**：全局用户 → 默认加入系统租户 → 强制赋 member 角色 → 不自动登录
 - **登录**：定活跃租户（指定 > is_default > 唯一）→ 签发 access（30min）+ refresh（7d）→ refresh 落库
-- **refresh**：验签 → 查 jti active → 旧 jti revoked + 新 refresh + 新 access（rotation）
-- **logout**：当前 jti → revoked
-- **switch-tenant**：校验目标 membership active → 重签 token
+- **refresh**：验签 → 查 jti 并加锁 → 如果 active，旧 jti 设 `revoked_reason="rotation"`、写 `successor_jti`、插入新 active 行（Branch A）；如果 revoked 且 `revoked_reason="rotation"` 且在宽限窗口内，读取 `successor_jti` 并纯读重签同一 successor JTI（Branch B）；否则 401
+- **logout**：当前 jti 设 `revoked_reason="logout"`，永不放行
+- **switch-tenant**：校验目标 membership active → 旧 jti revoke 且不写 `successor_jti` → 旧 jti 即使在宽限窗口内也 401
 
 ### 6.2 权限校验链
 
@@ -465,4 +472,5 @@ tests/
 | 日期 | 版本 | 变更内容 | 关联会话 |
 |---|---|---|---|
 | 2026-05-31 | v1.0 | 初版，确立 core/ + zones/ 模块化架构规范 | Week 2 Day 3 开工前 |
+| 2026-06-23 | v1.1 | Day 4 refresh rotation 并发治理与 refresh_token 审计规范 | Week 2 Day 5 Session 1 |
 
