@@ -17,9 +17,13 @@ class RefreshToken(AuditMixin, Base):
     jti：JWT ID，明文 UUID 字符串，唯一索引，rotation 时旧 jti→revoked。
     status：active / revoked。
     revoked_at：revoke 时间戳（用于并发宽限窗口判定）。
-    revoked_reason：revoke 原因 — "rotation" | "logout" | "switch_tenant"。
-        只有 "rotation" 原因且 revoke 在宽限窗口内时享受并发容错；
-        "logout" 主动注销的 jti 永不放行。
+    revoked_reason：revoke 原因 — "rotation" | "logout"。
+        "rotation" 表示 refresh token 因 rotation 被撤销，包含正常的 `/api/auth/refresh` rotation
+        与 `/api/auth/switch-tenant` 切换租户两种场景；switch_tenant 场景复用 "rotation" 字面量，
+        但不写 `successor_jti`（保持为 NULL），靠 `successor_jti IS NULL` 与正常 rotation 区分语义。
+        "logout" 表示 refresh token 因 `/api/auth/logout` 被撤销，logout 的 jti 永不放行。
+        注意：Branch B（并发读路径）在遇到无 `successor_jti` 时会拒绝（`if not successor_jti: 401`），
+        因此若未来新增 reason 字面量，必须同步评估 Branch B 判定逻辑以免引入安全或一致性问题。
     successor_jti：rotation 时新签发的 jti（仅存 jti 字符串，不存 token 原文）。
         Branch A（首次 refresh）写此字段，Branch B（并发 refresh）读取此字段
         来重签相同 jti，确保不会产生孤儿 active 行。
